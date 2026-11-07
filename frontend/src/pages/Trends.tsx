@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { Download } from 'lucide-react'
 import { api } from '../api/client'
 import { useApp } from '../app/AppContext'
@@ -6,7 +6,7 @@ import { HealthChart } from '../components/health/HealthChart'
 import { AssessmentCard } from '../components/ui/AssessmentCard'
 import { EmptyState, ErrorState, LoadingState, PageHeader, SectionHeader } from '../components/ui/primitives'
 import { METRICS, TREND_VIEWS, fmtValue } from '../health/metrics'
-import { adapter, baselineFor, dailyRows, explainTrend, latestOf, toCsv, useObservations } from '../health/service'
+import { adapter, anchorOf, baselineFor, dailyRows, explainTrend, latestOf, toCsv, useObservations } from '../health/service'
 import { useAsync } from '../lib/useAsync'
 
 export function Trends() {
@@ -22,7 +22,8 @@ export function Trends() {
   const baselines = useMemo(() => Object.fromEntries(view.metrics.map((m) => [m, baselineFor(obs, m)])), [obs, view])
   const explain = useMemo(() => explainTrend(obs, view.metrics[0]), [obs, view])
   const inWindow = useMemo(() => {
-    const cutoff = Date.now() - days * 86_400_000
+    const a = anchorOf(obs)
+    const cutoff = new Date(a.getFullYear(), a.getMonth(), a.getDate() - (days - 1)).getTime()
     return obs.filter((o) => new Date(o.measuredAt).getTime() >= cutoff)
   }, [obs, days])
 

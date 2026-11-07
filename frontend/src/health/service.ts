@@ -1,4 +1,5 @@
-import { useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { API_BASE } from '../api/client'
 import { METRICS, fmtValue } from './metrics'
 import { seedObservations } from './seed'
 import type { HealthAdapter, Metric, Observation } from './types'
@@ -57,18 +58,104 @@ export const localAdapter: HealthAdapter = {
   reset: (id) => { added = added.filter((o) => o.astronautId !== id); persist() },
 }
 
-/**
- * Placeholder for the real backend. Intentionally unimplemented: endpoints and payloads are still
- * to be agreed with the backend developer, so nothing here pretends to be established.
- */
-export const httpAdapterStub: HealthAdapter = {
-  label: 'Backend (not connected)',
-  list: () => { throw new Error('HTTP health adapter not implemented') },
-  add: () => { throw new Error('HTTP health adapter not implemented') },
-  reset: () => { throw new Error('HTTP health adapter not implemented') },
+/* ---------------- HTTP adapter (FastAPI backend) ---------------- */
+
+interface ApiObservation {
+  id: string; astronaut_id: string; metric: Metric; value: number; unit: string
+  measured_at: string; source: Observation['source']; notes?: string | null; session_id?: string | null
+}
+const fromApi = (o: ApiObservation): Observation => ({
+  id: o.id, astronautId: o.astronaut_id, metric: o.metric, value: o.value, unit: o.unit,
+  measuredAt: o.measured_at, source: o.source, notes: o.notes ?? undefined, sessionId: o.session_id ?? undefined,
+})
+
+let online = false
+const remote = new Map<string, Observation[]>()
+let remoteError: string | null = null
+
+/** Called by the app shell once the backend health check decides between backend and offline demo mode. */
+export function setBackendOnline(v: boolean) {
+  if (online === v) return
+  online = v
+  remote.clear()
+  remoteError = null
+  notify()
+}
+export const isBackendOnline = () => online
+
+async function fetchRemote(id: string): Promise<void> {
+  try {
+    const res = await fetch(`${API_BASE}/astronauts/${id}/observations`, { headers: { Accept: 'application/json' } })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const body = (await res.json()) as { items: ApiObservation[] }
+    remote.set(id, body.items.map(fromApi))
+    remoteError = null
+  } catch (e) {
+    remote.set(id, remote.get(id) ?? [])
+    remoteError = `Could not load saved measurements from the backend (${(e as Error).message}).`
+  }
+  notify()
 }
 
-export const adapter: HealthAdapter = localAdapter
+const localSimulated = (id: string) => added.filter((o) => o.astronautId === id && o.source === 'simulated_wearable')
+
+export const httpAdapter: HealthAdapter = {
+  label: 'Backend · SQLite (synthetic crew data + saved entries)',
+  list: (id) => [...(remote.get(id) ?? []), ...localSimulated(id)].sort((a, b) => a.measuredAt.localeCompare(b.measuredAt)),
+  add: async (items) => {
+    // the opt-in simulated stream stays in this browser: it must not flood the backend or look like saved data
+    if (items.every((i) => i.source === 'simulated_wearable')) return localAdapter.add(items) as Observation[]
+    const id = items[0].astronautId
+    let res: Response
+    try {
+      res = await fetch(`${API_BASE}/astronauts/${id}/observations`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          items: items.map((i) => ({
+            metric: i.metric, value: i.value, unit: i.unit, measured_at: i.measuredAt, source: i.source,
+            notes: i.notes ?? null, session_id: i.sessionId ?? null,
+          })),
+        }),
+      })
+    } catch {
+      throw new Error('The backend could not be reached. Nothing was saved.')
+    }
+    if (!res.ok) {
+      let msg = 'The backend rejected the entry. Nothing was saved.'
+      try {
+        const d = ((await res.json()) as { detail?: unknown }).detail
+        if (typeof d === 'string') msg = d
+        else if (Array.isArray(d) && d[0] && typeof d[0] === 'object') msg = String((d[0] as { msg?: string }).msg ?? msg)
+      } catch { /* keep generic message */ }
+      throw new Error(msg)
+    }
+    const body = (await res.json()) as { items: ApiObservation[] }
+    await fetchRemote(id)
+    return body.items.map(fromApi)
+  },
+  reset: (id) => { added = added.filter((o) => !(o.astronautId === id && o.source === 'simulated_wearable')); persist() },
+}
+
+/** Active adapter: the backend when it is reachable, otherwise the offline demo store. */
+export const adapter: HealthAdapter = {
+  get label() { return online ? httpAdapter.label : localAdapter.label },
+  list: (id) => (online ? httpAdapter : localAdapter).list(id),
+  add: (items) => (online ? httpAdapter : localAdapter).add(items),
+  reset: (id) => (online ? httpAdapter : localAdapter).reset(id),
+}
+
+/**
+ * Reference "now" for windows and baselines. Offline: the real clock. Backend: the end of the day of the latest
+ * saved (non-simulated) observation, so a historical dataset is shown as of its own last day rather than as empty.
+ */
+export function anchorOf(obs: Observation[]): Date {
+  if (!online) return new Date()
+  let max = ''
+  for (const o of obs) if (o.source !== 'simulated_wearable' && o.measuredAt > max) max = o.measuredAt
+  if (!max) return new Date()
+  const d = new Date(max)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999)
+}
 
 /* ---------------- React bindings ---------------- */
 
@@ -78,12 +165,20 @@ export function useStorageOk() { useHealthVersion(); return storageOk }
 
 export function useObservations(astronautId: string | null): Observation[] {
   const v = useHealthVersion()
+  useEffect(() => {
+    if (online && astronautId && !remote.has(astronautId)) void fetchRemote(astronautId)
+  }, [astronautId, v])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   return useMemo(() => (astronautId ? adapter.list(astronautId) : []), [astronautId, v])
 }
 
-export const addObservations = (items: Omit<Observation, 'id'>[]) => adapter.add(items)
-export const resetDemo = (astronautId: string) => adapter.reset(astronautId)
+export const addObservations = async (items: Omit<Observation, 'id'>[]): Promise<Observation[]> => adapter.add(items)
+/** Returns a message describing what was removed. Backend-saved entries are never deleted from here. */
+export function resetDemo(astronautId: string): string {
+  adapter.reset(astronautId)
+  return online ? 'Simulated stream samples removed. Entries saved in the backend were kept.' : 'Demo entries removed for this astronaut.'
+}
+export const useRemoteError = () => { useHealthVersion(); return online ? remoteError : null }
 
 /* ---------------- calculations ---------------- */
 
@@ -113,7 +208,7 @@ export interface Row { date: string; [k: string]: number | string | null }
  * One row per local day in the window. Each metric holds the median of that day's readings,
  * or null when nothing was measured (never zero, never interpolated).
  */
-export function dailyRows(obs: Observation[], metrics: Metric[], days: number, now = new Date()): Row[] {
+export function dailyRows(obs: Observation[], metrics: Metric[], days: number, now = anchorOf(obs)): Row[] {
   const buckets = new Map<string, Map<Metric, Observation[]>>()
   for (const o of obs) {
     if (!metrics.includes(o.metric)) continue
@@ -147,7 +242,7 @@ const LOOKBACK_DAYS = 28
  * Personal reference: median of daily medians over the 28 days before the most recent 3 days.
  * Needs readings on at least 5 of those days. It is a personal reference, not a validated normal range.
  */
-export function baselineFor(obs: Observation[], metric: Metric, now = new Date()): Baseline | null {
+export function baselineFor(obs: Observation[], metric: Metric, now = anchorOf(obs)): Baseline | null {
   const end = now.getTime() - RECENT_DAYS * DAY
   const start = end - LOOKBACK_DAYS * DAY
   const perDay = new Map<string, number[]>()
@@ -175,7 +270,7 @@ export interface Explanation {
 }
 
 /** Plain description of recent readings vs the personal reference. No thresholds, no diagnosis. */
-export function explainTrend(obs: Observation[], metric: Metric, now = new Date()): Explanation {
+export function explainTrend(obs: Observation[], metric: Metric, now = anchorOf(obs)): Explanation {
   const def = METRICS[metric]
   const base = baselineFor(obs, metric, now)
   if (!base) {

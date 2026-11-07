@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api, isDemoFallback, setDemoFallback } from '../api/client'
+import { setBackendOnline } from '../health/service'
 import type { Astronaut } from '../types/api'
 
-export type PageId = 'overview' | 'monitor' | 'checkin' | 'twin' | 'trends' | 'alerts'
+export type PageId = 'overview' | 'monitor' | 'checkin' | 'twin' | 'trends' | 'alerts' | 'environment'
 export type Conn = 'checking' | 'online' | 'demo'
 
 interface Ctx {
@@ -23,7 +24,7 @@ interface Ctx {
 
 const AppCtx = createContext<Ctx | null>(null)
 
-const PAGES: PageId[] = ['overview', 'monitor', 'checkin', 'twin', 'trends', 'alerts']
+const PAGES: PageId[] = ['overview', 'monitor', 'checkin', 'twin', 'trends', 'alerts', 'environment']
 
 function pageFromHash(): PageId {
   const h = window.location.hash.replace('#/', '').replace('#', '')
@@ -65,11 +66,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!alive) return
         setAstronauts(r.items)
         setSelectedId((cur) => (cur && r.items.some((a) => a.id === cur) ? cur : (r.items[0]?.id ?? null)))
-        if (isDemoFallback()) { setConn('demo'); setMode(null) }
+        if (isDemoFallback()) { setConn('demo'); setMode(null) } else setConn((c) => (c === 'checking' ? 'online' : c))
       })
       .catch((e: Error) => { if (alive) { setAstronautsError(e.message); setConn('online') } })
     return () => { alive = false }
   }, [attempt])
+
+  useEffect(() => { setBackendOnline(conn === 'online') }, [conn])
 
   const value = useMemo<Ctx>(() => ({
     page, go, astronauts, astronautsError, selectedId,

@@ -29,7 +29,7 @@ export function fallbackAstronauts() { return { items: crew } }
 
 export function fallbackOverview(id: string): Overview {
   const a = crew.find((c) => c.id === id) ?? crew[0]
-  if (a.id === 'AST-002') {
+  if (a.id === 'AST-001') {
     return {
       astronaut: a, source_label: SOURCE, assessment: sol,
       latest: { resting_heart_rate_bpm: 64, temperature_c: 36.6, sleep_hours: 7.4, stress_score: 3, mood_score: 4, fatigue_score: 2, pain_score: 0, captured_at: '2026-11-07T08:05:00Z' },
@@ -54,8 +54,8 @@ export function fallbackOverview(id: string): Overview {
 }
 
 export function fallbackTrends(id: string, days: number) {
-  const hr = id === 'AST-001' ? [65, 67, 66, 72, 76, 80, 84] : [64, 65, 64, 66, 65, 64, 64]
-  const sl = id === 'AST-001' ? [7.2, 7.0, 6.6, 6.0, 5.4, 5.0, 4.8] : [7.3, 7.4, 7.2, 7.5, 7.3, 7.4, 7.4]
+  const hr = id === 'AST-002' ? [65, 67, 66, 72, 76, 80, 84] : [64, 65, 64, 66, 65, 64, 64]
+  const sl = id === 'AST-002' ? [7.2, 7.0, 6.6, 6.0, 5.4, 5.0, 4.8] : [7.3, 7.4, 7.2, 7.5, 7.3, 7.4, 7.4]
   const n = id === 'AST-003' ? 2 : days
   const points: TrendPoint[] = Array.from({ length: n }, (_, i) => {
     const k = i % 7
@@ -64,7 +64,7 @@ export function fallbackTrends(id: string, days: number) {
       date: d.toISOString().slice(0, 10),
       resting_heart_rate_bpm: hr[k], sleep_hours: sl[k],
       temperature_c: Math.round((36.6 + (k % 3) * 0.1) * 10) / 10,
-      stress_score: id === 'AST-001' ? 3 + Math.floor(k / 2) : 3,
+      stress_score: id === 'AST-002' ? 3 + Math.floor(k / 2) : 3,
     }
   })
   return { astronaut_id: id, days, points }

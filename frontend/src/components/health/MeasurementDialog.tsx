@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { METRICS } from '../../health/metrics'
-import { addObservations } from '../../health/service'
+import { addObservations, isBackendOnline } from '../../health/service'
+import { useApp } from '../../app/AppContext'
 import type { Metric, Observation } from '../../health/types'
 
 type Kind = 'hr' | 'bp' | 'spo2' | 'temp' | 'sleep' | 'glucose' | 'hrv' | 'stress' | 'fatigue'
@@ -30,6 +31,8 @@ export function MeasurementDialog({ astronautId, onClose, onSaved }: Props) {
   const [notes, setNotes] = useState('')
   const [errors, setErrors] = useState<string[]>([])
   const first = useRef<HTMLSelectElement>(null)
+  const [busy, setBusy] = useState(false)
+  const { bump } = useApp()
 
   useEffect(() => {
     first.current?.focus()
@@ -50,7 +53,7 @@ export function MeasurementDialog({ astronautId, onClose, onSaved }: Props) {
     return { v }
   }
 
-  function save(e: React.FormEvent) {
+  async function save(e: React.FormEvent) {
     e.preventDefault()
     const errs: string[] = []
     const a = check(v1, def.metrics[0], isBp ? 'Systolic' : def.label)
@@ -68,8 +71,18 @@ export function MeasurementDialog({ astronautId, onClose, onSaved }: Props) {
     const base = { astronautId, measuredAt: t.toISOString(), source: 'manual' as const, notes: notes.trim() || undefined, sessionId }
     const items: Omit<Observation, 'id'>[] = [{ ...base, metric: def.metrics[0], value: a.v!, unit: METRICS[def.metrics[0]].unit }]
     if (isBp) items.push({ ...base, metric: 'diastolic_bp_mmhg', value: b.v!, unit: 'mmHg' })
-    addObservations(items)
-    onSaved('Saved locally (demo mode). Charts and cards have been updated.')
+    const toBackend = isBackendOnline()
+    setBusy(true)
+    try {
+      await addObservations(items)
+    } catch (x) {
+      setErrors([`Not saved: ${(x as Error).message}`])
+      setBusy(false)
+      return
+    }
+    setBusy(false)
+    bump()
+    onSaved(toBackend ? 'Saved to the backend. All pages have been updated.' : 'Saved locally (demo mode, backend offline). Charts and cards have been updated.')
     onClose()
   }
 
@@ -121,7 +134,7 @@ export function MeasurementDialog({ astronautId, onClose, onSaved }: Props) {
         )}
 
         <div className="mt-5 flex gap-3">
-          <button type="submit" className="btn-primary flex-1">Save measurement</button>
+          <button type="submit" className="btn-primary flex-1" disabled={busy}>{busy ? 'Saving…' : 'Save measurement'}</button>
           <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
         </div>
       </form>

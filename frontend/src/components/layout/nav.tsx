@@ -1,4 +1,4 @@
-import { Activity, BellRing, ClipboardPlus, HeartPulse, LayoutDashboard, PersonStanding } from 'lucide-react'
+import { Activity, BellRing, ClipboardPlus, Globe2, HeartPulse, LayoutDashboard, PersonStanding } from 'lucide-react'
 import type { PageId } from '../../app/AppContext'
 
 export const NAV: { id: PageId; label: string; short: string; Icon: typeof Activity }[] = [
@@ -8,4 +8,5 @@ export const NAV: { id: PageId; label: string; short: string; Icon: typeof Activ
   { id: 'twin', label: 'My Health Twin', short: 'Twin', Icon: PersonStanding },
   { id: 'trends', label: 'History & Trends', short: 'Trends', Icon: Activity },
   { id: 'alerts', label: 'Alerts & Summary', short: 'Alerts', Icon: BellRing },
+  { id: 'environment', label: 'Mission Environment', short: 'Env', Icon: Globe2 },
 ]

@@ -4,6 +4,7 @@ import { Sidebar } from '../components/layout/Sidebar'
 import { Topbar } from '../components/layout/Topbar'
 import { Alerts } from '../pages/Alerts'
 import { DailyCheckIn } from '../pages/DailyCheckIn'
+import { Environment } from '../pages/Environment'
 import { HealthTwin } from '../pages/HealthTwin'
 import { Monitoring } from '../pages/Monitoring'
 import { Overview } from '../pages/Overview'
@@ -27,6 +28,7 @@ function Shell() {
             {page === 'twin' && <HealthTwin />}
             {page === 'trends' && <Trends />}
             {page === 'alerts' && <Alerts />}
+            {page === 'environment' && <Environment />}
           </div>
         </main>
       </div>

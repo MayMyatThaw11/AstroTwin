@@ -98,3 +98,25 @@ export interface Health {
   mode: string
   data_source: string
 }
+
+/* ---------- NASA historical environment (read-only research data) ---------- */
+export interface EnvMetric {
+  id: string; label: string; unit: string; unit_verified: boolean; dataset: string; description: string
+  sample_count: number; first_timestamp: string | null; last_timestamp: string | null; locations: string[]; aliases: string[]
+}
+export interface EnvMetrics { items: EnvMetric[]; data_nature: string; is_live: boolean; disclaimer: string }
+export interface EnvSummary {
+  data_nature: string; is_live: boolean; disclaimer: string; not_personal_dose: string
+  datasets: { name: string; period: string; publisher: string; locations: string[]; note?: string }[]
+  sources: { source_file: string; rows_in_file: number; samples_in_db: number; rows_skipped_invalid: number; imported_at: string }[]
+  metrics: (Omit<EnvMetric, 'locations' | 'aliases' | 'sample_count' | 'first_timestamp' | 'last_timestamp'> & {
+    location: string | null; sample_count: number; min: number; max: number; mean: number; first_timestamp: string; last_timestamp: string
+  })[]
+}
+export interface EnvHistory {
+  metric: EnvMetric | { id: string; label: string; unit: string; unit_verified: boolean }
+  location: string | null; days: number; bucket?: string
+  points: { timestamp: string; value: number; min: number; max: number; n: number; instrument_id?: string; module?: string }[]
+  window: { start_exclusive: string; end: string; anchor: string } | null
+  is_live: boolean; data_nature: string; disclaimer: string
+}

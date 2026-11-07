@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, ClipboardPlus, Droplets, Gauge, HeartPulse, Pause, Play, Plus, RotateCcw, Wind, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { api } from '../api/client'
@@ -7,7 +7,7 @@ import { HealthChart } from '../components/health/HealthChart'
 import { MeasurementDialog } from '../components/health/MeasurementDialog'
 import { InfoBanner, PageHeader, SectionHeader, SimBadge, StatusBadge } from '../components/ui/primitives'
 import { METRICS, fmtValue } from '../health/metrics'
-import { addObservations, adapter, baselineFor, dailyRows, latestOf, resetDemo, useObservations, useStorageOk, type Row } from '../health/service'
+import { addObservations, adapter, isBackendOnline, useRemoteError, baselineFor, dailyRows, latestOf, resetDemo, useObservations, useStorageOk, type Row } from '../health/service'
 import { SOURCE_LABEL, type Metric, type Observation } from '../health/types'
 import { useAsync } from '../lib/useAsync'
 
@@ -47,6 +47,7 @@ export function Monitoring() {
   const { selectedId, selected, go, version } = useApp()
   const obs = useObservations(selectedId)
   const storageOk = useStorageOk()
+  const remoteErr = useRemoteError()
   const ov = useAsync(() => (selectedId ? api.overview(selectedId) : Promise.reject(new Error('none'))), [selectedId, version])
   const [dialog, setDialog] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -71,7 +72,7 @@ export function Monitoring() {
         { ...base, metric: 'spo2_pct', value: Math.round(Math.min(100, 97.5 + rand() * 0.9)), unit: '%' },
       ]
       if (tick.current % 5 === 0) items.push({ ...base, metric: 'temperature_c', value: Math.round((36.6 + rand() * 0.1) * 10) / 10, unit: '°C' })
-      addObservations(items)
+      void addObservations(items)
     }
     const start = { current: hr.current }
     const last = latestOf(adapter.list(selectedId), 'heart_rate_bpm')
@@ -115,6 +116,7 @@ export function Monitoring() {
       />
 
       {toast && <div role="status" className="rounded-lg border px-4 py-2.5 text-sm font-medium" style={{ borderColor: 'rgb(var(--st-stable) / .5)', background: 'rgb(var(--st-stable) / .1)' }}>{toast}</div>}
+      {remoteErr && <InfoBanner tone="warn">{remoteErr}</InfoBanner>}
       {!storageOk && <InfoBanner tone="warn">Browser storage is unavailable, so new entries will be lost when you reload.</InfoBanner>}
 
       <div className="card flex flex-wrap items-center gap-3 !py-3">
@@ -127,7 +129,7 @@ export function Monitoring() {
           <button className="btn-ghost" onClick={() => setRunning((r) => !r)} aria-pressed={running}>
             {running ? <><Pause className="h-4 w-4" aria-hidden /> Pause</> : <><Play className="h-4 w-4" aria-hidden /> Start demo stream</>}
           </button>
-          <button className="btn-ghost" onClick={() => { if (window.confirm('Remove all manual and simulated entries for this astronaut?')) { setRunning(false); resetDemo(selected.id); setToast('Demo entries removed for this astronaut.') } }}>
+          <button className="btn-ghost" onClick={() => { if (window.confirm(isBackendOnline() ? 'Remove simulated stream samples for this astronaut? Entries saved in the backend are kept.' : 'Remove all manual and simulated entries for this astronaut?')) { setRunning(false); setToast(resetDemo(selected.id)) } }}>
             <RotateCcw className="h-4 w-4" aria-hidden /> Reset demo
           </button>
         </div>

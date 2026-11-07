@@ -3,7 +3,7 @@ export type Metric =
   | 'spo2_pct' | 'temperature_c' | 'sleep_hours'
   | 'glucose_mg_dl' | 'hrv_ms' | 'stress_score' | 'fatigue_score'
 
-export type MeasurementSource = 'manual' | 'simulated_wearable' | 'demo_seed' | 'backend'
+export type MeasurementSource = 'manual' | 'simulated_wearable' | 'demo_seed' | 'backend' | 'synthetic'
 
 export interface Observation {
   id: string
@@ -23,12 +23,13 @@ export const SOURCE_LABEL: Record<MeasurementSource, string> = {
   simulated_wearable: 'Simulated wearable',
   demo_seed: 'Demo seed data',
   backend: 'Backend',
+  synthetic: 'Synthetic dataset',
 }
 
-/** Adapter contract. Only the local one is implemented; the HTTP one waits for the agreed backend contract. */
+/** Adapter contract. Local (offline demo) and HTTP (FastAPI backend) implementations live in service.ts. */
 export interface HealthAdapter {
   readonly label: string
   list(astronautId: string): Observation[]
-  add(items: Omit<Observation, 'id'>[]): Observation[]
+  add(items: Omit<Observation, 'id'>[]): Observation[] | Promise<Observation[]>
   reset(astronautId: string): void
 }

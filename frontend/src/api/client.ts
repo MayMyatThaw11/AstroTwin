@@ -1,11 +1,13 @@
 import type {
-  AlertsResponse, Astronaut, CheckinRequest, CheckinResponse, Health, MedicalSummary, Overview, Trends,
+  AlertsResponse, Astronaut, CheckinRequest, CheckinResponse, EnvHistory, EnvMetrics, EnvSummary, Health, MedicalSummary, Overview, Trends,
 } from '../types/api'
 import {
   fallbackAlerts, fallbackAstronauts, fallbackOverview, fallbackSummary, fallbackTrends,
 } from './fallback'
 
 const BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000/api/v1'
+
+export const API_BASE = BASE
 
 export class ApiError extends Error {
   status: number
@@ -89,6 +91,11 @@ export const api = {
   trends: (id: string, days: 7 | 30) => get<Trends>(`/astronauts/${id}/trends?days=${days}`, () => fallbackTrends(id, days)),
   alerts: (id: string) => get<AlertsResponse>(`/astronauts/${id}/alerts`, () => fallbackAlerts(id)),
   summary: (id: string) => get<MedicalSummary>(`/astronauts/${id}/medical-summary`, () => fallbackSummary(id)),
+  /** NASA environment endpoints never use sample data: archived research data must not be faked. */
+  envMetrics: () => request<EnvMetrics>('/environment/metrics'),
+  envSummary: () => request<EnvSummary>('/environment/summary'),
+  envHistory: (metric: string, days: 7 | 30, location: 'iss' | 'ground') =>
+    request<EnvHistory>(`/environment/history?metric=${encodeURIComponent(metric)}&days=${days}&location=${location}`),
   /** Never falls back: a check-in that was not saved must not look saved. */
   checkin: async (body: CheckinRequest): Promise<CheckinResponse> => {
     if (demoFallback) {

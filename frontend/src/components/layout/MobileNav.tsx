@@ -6,7 +6,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-hair bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-7 border-t border-hair bg-panel/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
     >
       {NAV.map(({ id, short, Icon }) => {
         const active = page === id
