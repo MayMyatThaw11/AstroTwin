@@ -1,5 +1,5 @@
 import type {
-  AlertsResponse, Astronaut, CheckinRequest, CheckinResponse, EnvHistory, EnvMetrics, EnvSummary, Health, MedicalSummary, Overview, Trends,
+  AlertsResponse, Astronaut, CheckinRequest, CheckinResponse, EnvDatasets, EnvHistory, EnvMetrics, EnvSummary, Health, MedicalSummary, Overview, Trends,
 } from '../types/api'
 import {
   fallbackAlerts, fallbackAstronauts, fallbackOverview, fallbackSummary, fallbackTrends,
@@ -94,8 +94,9 @@ export const api = {
   /** NASA environment endpoints never use sample data: archived research data must not be faked. */
   envMetrics: () => request<EnvMetrics>('/environment/metrics'),
   envSummary: () => request<EnvSummary>('/environment/summary'),
-  envHistory: (metric: string, days: 7 | 30, location: 'iss' | 'ground') =>
-    request<EnvHistory>(`/environment/history?metric=${encodeURIComponent(metric)}&days=${days}&location=${location}`),
+  envDatasets: (metric: string) => request<EnvDatasets>(`/environment/datasets?metric=${encodeURIComponent(metric)}`),
+  envHistory: (metric: string, days: 7 | 30, location: 'iss' | 'ground', period?: string) =>
+    request<EnvHistory>(`/environment/history?metric=${encodeURIComponent(metric)}&days=${days}&location=${location}${period ? `&period=${encodeURIComponent(period)}` : ''}`),
   /** Never falls back: a check-in that was not saved must not look saved. */
   checkin: async (body: CheckinRequest): Promise<CheckinResponse> => {
     if (demoFallback) {
