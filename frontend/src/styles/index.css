@@ -1,0 +1,116 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/space-grotesk';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Shared tokens for the landing page and the app (RGB triplets so Tailwind alpha works). */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 5 10 18;
+  --surface: 13 23 38;
+  --surface2: 20 34 54;
+  --ink: 242 247 255;
+  --dim: 170 184 206;
+  --accent: 54 205 235;
+  --aqua: 185 229 233;
+  --on-accent: 5 10 18;
+  --st-stable: 61 213 152;
+  --st-review: 242 190 92;
+  --st-escalate: 240 112 124;
+  --st-na: 140 160 185;
+  --hair: 38 52 74;
+  --planet-hi: 120 150 185;
+  --planet-lo: 60 80 110;
+  --planet-a: .35;
+  --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 12px 32px -16px rgb(0 0 0 / .6);
+  --glow: 54 205 235;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: 239 244 248;
+  --surface: 255 255 255;
+  --surface2: 238 245 249;
+  --ink: 11 32 51;
+  --dim: 79 100 120;
+  --accent: 0 141 153;
+  --aqua: 185 229 233;
+  --on-accent: 255 255 255;
+  --st-stable: 15 128 88;
+  --st-review: 146 94 0;
+  --st-escalate: 190 50 66;
+  --st-na: 95 115 132;
+  --hair: 217 228 235;
+  --planet-hi: 214 150 112;
+  --planet-lo: 185 195 215;
+  --planet-a: .8;
+  --shadow: 0 1px 2px rgb(11 32 51 / .05), 0 14px 30px -18px rgb(11 32 51 / .20);
+  --glow: 0 141 153;
+}
+
+html, body, #root { min-height: 100%; }
+body {
+  margin: 0;
+  background: rgb(var(--bg));
+  color: rgb(var(--ink));
+  font-family: 'Inter Variable', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+::selection { background: rgb(var(--accent) / .28); color: inherit; }
+
+:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; border-radius: 6px; }
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-hair bg-panel/90 p-4 backdrop-blur-sm sm:p-5;
+    box-shadow: var(--shadow);
+  }
+  .card-title { @apply text-[11px] font-semibold uppercase tracking-[.1em] text-ink-dim; }
+  .btn {
+    @apply inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply btn bg-cyan text-on-accent hover:brightness-110; }
+  .btn-ghost { @apply btn border border-hair bg-panel text-ink hover:bg-panel2; }
+  .field {
+    @apply min-h-[44px] w-full rounded-lg border border-ink/20 bg-space px-3 text-base text-ink placeholder:text-ink-dim/70;
+  }
+  .field[aria-invalid='true'] { border-color: rgb(var(--st-escalate)); }
+}
+
+/* Soft ambient light behind the app content; never overlaps data */
+.app-atmosphere {
+  background:
+    linear-gradient(180deg, rgb(var(--bg)) 0%, rgb(var(--surface2)) 100%);
+}
+
+/* Decorative planets: non-interactive, low contrast, behind content */
+.planet {
+  position: absolute; border-radius: 50%; pointer-events: none;
+  background:
+    radial-gradient(circle at 34% 62%, rgb(0 0 0 / .06) 0 3%, transparent 3.5%),
+    radial-gradient(circle at 58% 80%, rgb(0 0 0 / .035) 0 2%, transparent 2.5%),
+    radial-gradient(circle at 46% 90%, rgb(0 0 0 / .04) 0 3.5%, transparent 4%),
+    radial-gradient(circle at 24% 82%, rgb(0 0 0 / .05) 0 2.5%, transparent 3%),
+    radial-gradient(circle at 40% 100%, rgb(var(--planet-hi) / var(--planet-a)) 0%, rgb(var(--planet-hi) / calc(var(--planet-a) * .7)) 38%, rgb(var(--planet-lo) / calc(var(--planet-a) * .5)) 60%, transparent 70%);
+}
+.planet-top { right: -120px; top: -400px; width: 960px; height: 960px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, transparent 95%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, transparent 95%); }
+.planet-side { left: -120px; bottom: -150px; width: 300px; height: 300px; opacity: .8; }
+
+.fade-in { animation: fade .3s ease both; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.zone { transition: fill .15s, stroke .15s, opacity .15s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+@media print {
+  body { background: #fff; color: #000; }
+  .no-print { display: none !important; }
+  .print-area { border: none; background: #fff; color: #000; }
+}
