@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data/astrotwin.db*
+data/nasa/cache/
+data/nasa/fetch*.out
+data/nasa/fetch*.err

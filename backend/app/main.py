@@ -1,10 +1,11 @@
-﻿from contextlib import asynccontextmanager
+﻿import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import db as dbmod
-from .environment import import_nasa, router as env_router
+from .environment import import_nasa, router as env_router, warm_cache
 from .routes import health, router
 from .seed import seed
 
@@ -17,6 +18,8 @@ async def lifespan(app: FastAPI):
     dbmod.init_db(conn)
     app.state.seed_result = seed(conn)  # idempotent
     app.state.nasa_result = import_nasa(conn)  # idempotent; skipped if the ZIP is absent
+    if not os.environ.get("ASTROTWIN_NO_WARM"):
+        warm_cache(conn)
     app.state.conn = conn
     yield
     conn.close()

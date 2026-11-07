@@ -5,9 +5,27 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.fixture(scope="session")
+def template_db(tmp_path_factory):
+    """Build (seed + NASA import) once, then copy per test: the NASA import is large."""
+    import sqlite3
+    p = tmp_path_factory.mktemp("tpl") / "tpl.db"
+    os.environ["ASTROTWIN_DB"] = str(p)
+    from app.main import app
+    with TestClient(app):
+        pass
+    c = sqlite3.connect(p)
+    c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    c.close()
+    return p
+
+
 @pytest.fixture()
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ASTROTWIN_DB", str(tmp_path / "t.db"))
+def client(template_db, tmp_path, monkeypatch):
+    import shutil
+    dst = tmp_path / "t.db"
+    shutil.copy(template_db, dst)
+    monkeypatch.setenv("ASTROTWIN_DB", str(dst))
     from app.main import app
     with TestClient(app) as c:
         yield c
@@ -131,31 +149,58 @@ def test_concurrent_requests_do_not_fail(client):
 def test_environment_import_idempotent_and_counts(client):
     c = client.app.state.conn
     n = lambda sql, *a: c.execute(sql, a).fetchone()[0]
+    assert n("SELECT COUNT(*) FROM env_samples WHERE source_file LIKE 'RR-1_EDA_Telemetry%'") == 12087 * 6
+    assert n("SELECT COUNT(*) FROM env_samples WHERE source_file='radiation_readings.csv'") == 2969
     total = n("SELECT COUNT(*) FROM env_samples")
-    assert total == 12087 * 6 + 39 * 4 + 2969
-    assert n("SELECT COUNT(*) FROM env_samples WHERE metric='co2_ppm'") == 12087 * 2
-    assert n("SELECT COUNT(*) FROM env_samples WHERE metric='radlab_absorbed_dose_rate'") == 2969
     from app.environment import import_nasa
-    import_nasa(c)
+    r = import_nasa(c, force=True)  # full re-import must add nothing
     assert n("SELECT COUNT(*) FROM env_samples") == total
+    if r["staged_2020plus"].get("imported") and not r["staged_2020plus"].get("skipped_unchanged"):
+        assert r["staged_2020plus"]["samples_inserted_now"] == 0
+
+
+def test_environment_2020plus_data_is_real_and_unshifted(client):
+    c = client.app.state.conn
+    rows = c.execute("SELECT MIN(measured_at), MAX(measured_at), COUNT(*) FROM env_samples WHERE source_file='nasa_env_2020plus.csv.gz'").fetchone()
+    if not rows[2]:
+        pytest.skip("staged 2020+ file not present")
+    assert rows[0] >= "2020-01-01" and rows[1] <= "2026-11-07T23:59:59Z"
+    # every staged record keeps its source URL and unit; nothing is dated after today (no invented recent data)
+    assert c.execute("SELECT COUNT(*) FROM env_samples WHERE source_file='nasa_env_2020plus.csv.gz' AND (source_url IS NULL OR unit IS NULL)").fetchone()[0] == 0
+    assert c.execute("SELECT COUNT(*) FROM env_samples WHERE metric='radlab_absorbed_dose_rate' AND unit_verified=1").fetchone()[0] == 0
 
 
 def test_environment_endpoints(client):
     m = client.get("/api/v1/environment/metrics").json()
     assert m["is_live"] is False and {i["id"] for i in m["items"]} >= {"co2_ppm", "temperature_c", "humidity_pct", "radiation_total_mgy_d"}
     assert any(i["id"] == "radlab_absorbed_dose_rate" and i["unit_verified"] is False for i in m["items"])
+    assert all(i["latest_observation_date"] for i in m["items"])
     s = client.get("/api/v1/environment/summary").json()
-    assert s["is_live"] is False and "not any astronaut" in s["not_personal_dose"] and len(s["sources"]) == 3
+    assert s["is_live"] is False and "not any astronaut" in s["not_personal_dose"] and s["datasets"] and s["latest_observation_date"]
+    ds = client.get("/api/v1/environment/datasets?metric=co2").json()["items"]
+    assert ds and ds[0]["last_timestamp"] >= ds[-1]["last_timestamp"]
     h = client.get("/api/v1/environment/history?metric=co2&days=7").json()
-    assert h["location"] == "iss" and h["points"] and h["window"]["end"].startswith("2014-11-01")
-    assert all(1862 <= p["min"] and p["max"] <= 4667 for p in h["points"])
+    assert h["location"] == "iss" and h["points"] and h["window"]["end"] == max(i["last_timestamp"] for i in ds)
     g = client.get("/api/v1/environment/history?metric=co2&days=7&location=ground").json()
-    assert g["points"][0]["value"] != h["points"][0]["value"] or g["location"] == "ground"
-    r = client.get("/api/v1/environment/history?metric=radiation&days=30").json()
-    assert r["bucket"] == "day" and r["metric"]["unit"] == "mGy/day"
+    assert g["location"] == "ground" and g["points"]
+    # a chosen period and an explicit date range
+    pid = ds[-1]["period_id"]
+    p = client.get(f"/api/v1/environment/history?metric=co2&days=30&period={pid}").json()
+    assert p["points"] and p["window"]["end"] == ds[-1]["last_timestamp"]
+    r = client.get(f"/api/v1/environment/history?metric=co2&start={ds[-1]['first_timestamp'][:10]}&end={ds[-1]['first_timestamp'][:10]}&period={pid}").json()
+    assert r["window"]["end"].startswith(ds[-1]["first_timestamp"][:10])
+    rad = client.get("/api/v1/environment/history?metric=radiation&days=30").json()
+    assert rad["bucket"] == "day" and rad["metric"]["unit"] == "mGy/day"
     assert client.get("/api/v1/environment/history?metric=bogus").status_code == 422
     assert client.get("/api/v1/environment/history?metric=co2&location=mars").status_code == 422
     assert client.get("/api/v1/environment/history?metric=co2&days=0").status_code == 422
+    assert client.get("/api/v1/environment/history?metric=co2&start=2020-13-01").status_code == 422
+
+
+def test_radlab_never_averages_across_instruments(client):
+    h = client.get("/api/v1/environment/history?metric=radlab&days=30").json()
+    assert h["points"] and all("instrument_id" in p for p in h["points"])
+    assert h["metric"]["unit_verified"] is False
 
 
 def test_health_data_not_mixed_with_environment(client):
